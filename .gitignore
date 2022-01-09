@@ -1,0 +1,3 @@
+*.swp
+.clang-format
+compile_commands.json
