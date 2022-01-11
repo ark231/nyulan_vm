@@ -3,6 +3,8 @@
 
 #include <cmath>
 #include <functional>
+#include <stdexcept>
+#include <string>
 namespace nyulan {
 namespace {
 Register treat_as_double(Register reg0, Register reg1, std::function<double(double, double)> operation) {
@@ -12,12 +14,11 @@ Register treat_as_double(Register reg0, Register reg1, std::function<double(doub
     return *reinterpret_cast<Register*>(&ope_result);
 }
 }  // namespace
-VirtualMachine::VirtualMachine(std::vector<std::vector<std::uint8_t>> static_datas) {
+VirtualMachine::VirtualMachine(std::vector<std::uint8_t> static_datas) {
     Address head_addr = 0;
-    for (const auto& static_data : static_datas) {
-        for (const auto& byte : static_data) {
-            this->static_datas[head_addr] = byte;
-        }
+    for (const auto& byte : static_datas) {
+        this->static_datas[head_addr] = byte;
+        head_addr++;
     }
     this->registers.fill(0);
 }
@@ -146,7 +147,7 @@ void VirtualMachine::exec(std::vector<OneStep> steps) {
                     auto result =
                         this->invoke_builtin(registers[operand[0]] & ~((Register)0b1 << 63));  //最上位ビットのみを抽出
                     if (result) {
-                        for (auto i = 0; i < sizeof(Register::ValueType); i++) {
+                        for (size_t i = 0; i < sizeof(Register::ValueType); i++) {
                             std::uint8_t byte =
                                 static_cast<uint8_t>((result.value() & (0b1111'1111 << (i * 8))) >> (i * 8));
                             calculation_stack.push(byte);
@@ -162,9 +163,15 @@ void VirtualMachine::exec(std::vector<OneStep> steps) {
                 program_counter = this->call_stack.top();
                 this->call_stack.pop();
                 continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
+            default:
+                throw std::runtime_error("can't understand opecode" + std::to_string(static_cast<int>(instruction)));
+                break;
         }
         program_counter++;
     }
 }
-std::optional<Register> VirtualMachine::invoke_builtin(Address func_addr) { return std::nullopt; }
+std::optional<Register> VirtualMachine::invoke_builtin(Address func_addr) {
+    switch (static_cast<Address::ValueType>(func_addr)) {}
+    return std::nullopt;
+}
 }  // namespace nyulan

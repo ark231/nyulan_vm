@@ -15,23 +15,25 @@ struct PhantomBase_<tag, value_type, true> : private boost::operators<PhantomBas
                                              private boost::left_shiftable<PhantomBase_<tag, value_type, true>>,
                                              private boost::right_shiftable<PhantomBase_<tag, value_type, true>> {
     using ValueType = value_type;
-    using Hash = std::hash<value_type>;
     using this_type = PhantomBase_<tag, value_type, true>;
+    struct Hash {
+        auto operator()(const this_type a) const { return std::hash<value_type>()(static_cast<const value_type>(a)); }
+    };
     value_type value_;
     PhantomBase_(value_type value) : value_(value) {}
     PhantomBase_() {}
     template <typename T>
-    explicit operator T() {
+    explicit operator T() const {
         if constexpr (std::is_convertible_v<value_type, T>) {
             return value_;
         } else {
             static_assert(false_v<T>);
         }
     }
-    value_type value() { return value_; }
+    value_type value() const { return value_; }
 
-    bool operator<(const this_type& other) { return this->value_ < static_cast<value_type>(other); }
-    bool operator==(const this_type& other) { return this->value_ == static_cast<value_type>(other); }
+    bool operator<(const this_type& other) const { return this->value_ < static_cast<value_type>(other); }
+    bool operator==(const this_type& other) const { return this->value_ == static_cast<value_type>(other); }
     this_type& operator+=(const this_type& other) {
         this->value_ += static_cast<value_type>(other);
         return *this;
@@ -80,16 +82,16 @@ struct PhantomBase_<tag, value_type, true> : private boost::operators<PhantomBas
         --(this->value_);
         return *this;
     }
-    this_type& operator~() { return ~this->value_; }
+    this_type operator~() { return ~this->value_; }
 };
 template <typename tag, typename value_type>
 struct PhantomBase_<tag, value_type, false> {
-    using Hash = std::hash<value_type>;
+    static auto Hash = [](PhantomBase_<tag, value_type, false> a) { return std::hash(static_cast<value_type>(a)); };
     using ValueType = value_type;
     value_type value_;
     PhantomBase_(value_type value) : value_(value) {}
     PhantomBase_() {}
-    operator value_type() { return value_; }
+    operator value_type() const { return value_; }
 };
 
 template <typename tag, typename value_type>

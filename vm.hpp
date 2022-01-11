@@ -12,7 +12,7 @@
 namespace nyulan {
 class VirtualMachine {
    public:
-    VirtualMachine(std::vector<std::vector<std::uint8_t>>);
+    VirtualMachine(std::vector<std::uint8_t>);
     VirtualMachine(std::unordered_map<Address, std::uint8_t, Address::Hash>);
     void exec(std::vector<OneStep>);
 
@@ -26,9 +26,9 @@ class VirtualMachine {
 
     std::optional<Register> invoke_builtin(Address);
     // builtins
-    void read(Register fd, uint8_t *buf, std::size_t len);
-    void write(Register fd, uint8_t *buf, std::size_t len);
-    Register open(char *fname);
+    void read(Register fd, Address buf, std::size_t len);
+    void write(Register fd, Address buf, std::size_t len);
+    Register open(Address fname);
     void close(Register fd);
 };
 }  // namespace nyulan
