@@ -6,8 +6,18 @@ add_compile_options(-Wall -Wextra)
 
 find_package(Boost COMPONENTS program_options log REQUIRED)
 
+include(cmake/CPM.cmake)
+CPMAddPackage(
+    NAME magic_enum
+    GITHUB_REPOSITORY Neargye/magic_enum
+    GIT_TAG v0.7.3
+)
+
 add_library(core STATIC
     vm.cpp
+    )
+target_include_directories(core PUBLIC
+    ${magic_enum_SOURCE_DIR}/include
     )
 target_compile_options(core PRIVATE
     -pthread

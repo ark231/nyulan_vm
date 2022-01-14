@@ -5,21 +5,22 @@
 #include <boost/log/trivial.hpp>
 #include <cmath>
 #include <functional>
+#include <magic_enum.hpp>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 namespace nyulan {
 namespace {
 Register treat_as_double(Register reg0, Register reg1, std::function<double(double, double)> operation) {
-    double conved_reg0 = *reinterpret_cast<double*>(&reg0);
-    double conved_reg1 = *reinterpret_cast<double*>(&reg1);
+    double conved_reg0 = *reinterpret_cast<double *>(&reg0);
+    double conved_reg1 = *reinterpret_cast<double *>(&reg1);
     double ope_result = operation(conved_reg0, conved_reg1);
-    return *reinterpret_cast<Register*>(&ope_result);
+    return *reinterpret_cast<Register *>(&ope_result);
 }
 }  // namespace
 VirtualMachine::VirtualMachine(std::vector<std::uint8_t> static_datas) {
     Address head_addr = 0;
-    for (const auto& byte : static_datas) {
+    for (const auto &byte : static_datas) {
         this->static_datas[head_addr] = byte;
         head_addr++;
     }
@@ -30,7 +31,7 @@ VirtualMachine::VirtualMachine(std::unordered_map<Address, std::uint8_t, Address
 void VirtualMachine::exec(std::vector<OneStep> steps) {
     Address program_counter = 0;
     while (program_counter < steps.size()) {
-        const auto& step = steps[static_cast<size_t>(program_counter)];
+        const auto &step = steps[static_cast<size_t>(program_counter)];
         auto instruction = (step & 0b1111'1111'0000'0000) >> 8;
         int operand[] = {static_cast<int>((step & 0b1111'0000) >> 4), static_cast<int>((step & 0b1111))};
         BOOST_LOG_TRIVIAL(debug) << stringify_vm_state();
@@ -104,6 +105,10 @@ void VirtualMachine::exec(std::vector<OneStep> steps) {
                 this->calculation_stack.push(static_cast<std::uint8_t>(this->registers[operand[0]] & 0b1111'1111));
                 break;
 
+            case static_cast<uint8_t>(Instruction::PUSHR16):
+                this->calculation_stack.push(static_cast<std::uint8_t>(this->registers[operand[0]] & 0b1111'1111));
+                break;
+
             case static_cast<uint8_t>(Instruction::PUSHL):
                 this->calculation_stack.push(static_cast<std::uint8_t>(step & 0b1111'1111));
                 break;
@@ -167,9 +172,14 @@ void VirtualMachine::exec(std::vector<OneStep> steps) {
                 program_counter = this->call_stack.top();
                 this->call_stack.pop();
                 continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
-            default:
-                throw std::runtime_error("can't understand opecode" + std::to_string(static_cast<int>(instruction)));
-                break;
+            default: {
+                std::stringstream err_msg;
+                err_msg << "can't understand opecode" << std::to_string(static_cast<int>(instruction)) << "("
+                        << magic_enum::enum_name(
+                               magic_enum::enum_cast<Instruction>(static_cast<int>(instruction)).value())
+                        << ")";
+                throw std::runtime_error(err_msg.str());
+            } break;
         }
         program_counter++;
     }
@@ -181,7 +191,7 @@ std::optional<Register> VirtualMachine::invoke_builtin(Address func_addr) {
 
 std::string VirtualMachine::stringify_vm_state() {
     std::stringstream result;
-    for (size_t i = 0; const auto& register_ : registers) {
+    for (size_t i = 0; const auto &register_ : registers) {
         result << "r" << i << ":" << static_cast<Register::ValueType>(register_) << " ";
         i++;
     }
