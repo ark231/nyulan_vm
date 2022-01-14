@@ -1,8 +1,11 @@
 
 #include "vm.hpp"
 
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
 #include <cmath>
 #include <functional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 namespace nyulan {
@@ -30,6 +33,7 @@ void VirtualMachine::exec(std::vector<OneStep> steps) {
         const auto& step = steps[static_cast<size_t>(program_counter)];
         auto instruction = (step & 0b1111'1111'0000'0000) >> 8;
         int operand[] = {static_cast<int>((step & 0b1111'0000) >> 4), static_cast<int>((step & 0b1111))};
+        BOOST_LOG_TRIVIAL(debug) << stringify_vm_state();
         switch (static_cast<int>(instruction)) {
             case static_cast<uint8_t>(Instruction::MOV):
                 this->registers[operand[0]] = this->registers[operand[1]];
@@ -173,5 +177,15 @@ void VirtualMachine::exec(std::vector<OneStep> steps) {
 std::optional<Register> VirtualMachine::invoke_builtin(Address func_addr) {
     switch (static_cast<Address::ValueType>(func_addr)) {}
     return std::nullopt;
+}
+
+std::string VirtualMachine::stringify_vm_state() {
+    std::stringstream result;
+    for (size_t i = 0; const auto& register_ : registers) {
+        result << "r" << i << ":" << static_cast<Register::ValueType>(register_) << " ";
+        i++;
+    }
+    result << std::endl;
+    return result.str();
 }
 }  // namespace nyulan

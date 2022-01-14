@@ -13,20 +13,20 @@ enum class Endian {
     BIG,
 };
 struct ObjectFile {
-    char magic[3];
-    std::uint8_t bom[2];  // 0x1100
+    char magic[3 + 1];        //{'N','Y','U','\0'}
+    std::uint8_t bom[2 + 1];  // 0x1100
     Endian endian;
     std::uint64_t version;
     std::uint16_t literal_data_size;
     std::vector<std::uint8_t> literal_datas;
     std::uint16_t global_label_num;
     struct Label {
-        std::string lael_name;  // NUL terminated in actual file
+        std::string rael_name;  // NUL terminated in actual file
         std::uint64_t label_address;
     };
     std::vector<Label> global_labels;
     std::uint64_t code_length;
-    std::vector<OneStep::ValueType> code;
+    std::vector<OneStep> code;
 
     ObjectFile(std::string);
     ObjectFile() = default;

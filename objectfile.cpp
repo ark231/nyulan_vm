@@ -1,5 +1,7 @@
 #include "objectfile.hpp"
 
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
 #include <iomanip>
 #include <stdexcept>
 #include <string>
@@ -10,11 +12,11 @@ ObjectFile::ObjectFile(std::string objectfilename) {
     if (!objectfile.is_open()) {
         throw new std::runtime_error("error: couldn't open objectfile " + objectfilename);
     }
-    objectfile >> std::setw(3) >> this->magic;
+    objectfile >> std::setw(4) >> this->magic;
     if (std::string(this->magic) != "NYU") {
         throw new std::runtime_error("given file is not nyulan object file");
     }
-    objectfile >> std::setw(2) >> this->bom;
+    objectfile >> std::setw(3) >> this->bom;
     switch (this->bom[0]) {
         case 0x00:
             this->endian = Endian::LITTLE;
@@ -26,17 +28,20 @@ ObjectFile::ObjectFile(std::string objectfilename) {
     this->version = this->file_to_value<decltype(this->version)>(objectfile);
     this->literal_data_size = this->file_to_value<decltype(this->literal_data_size)>(objectfile);
 
-    std::uint8_t* literal_datas = new std::uint8_t[this->literal_data_size];
-    objectfile >> std::setw(this->literal_data_size) >> literal_datas;
-    this->literal_datas = std::vector<std::uint8_t>(literal_datas, literal_datas + (this->literal_data_size - 1));
+    BOOST_LOG_TRIVIAL(debug) << this->literal_data_size;
+    std::uint8_t* literal_datas = new std::uint8_t[this->literal_data_size + 1];
+    objectfile >> std::setw(this->literal_data_size + 1) >> literal_datas;
+    BOOST_LOG_TRIVIAL(debug) << "data_segment:\"" << literal_datas << "\"";
+    this->literal_datas = std::vector<std::uint8_t>(literal_datas, literal_datas + (this->literal_data_size));
     delete[] literal_datas;
 
     this->global_label_num = this->file_to_value<decltype(this->global_label_num)>(objectfile);
+    BOOST_LOG_TRIVIAL(debug) << "glabel_n:" << this->global_label_num;
 
     this->global_labels.reserve(this->global_label_num);
     for (auto i = 0; i < this->global_label_num; i++) {
         Label label;
-        std::getline(objectfile, label.lael_name, '\0');
+        std::getline(objectfile, label.rael_name, '\0');
         label.label_address = this->file_to_value<decltype(label.label_address)>(objectfile);
         this->global_labels.push_back(label);
     }
@@ -72,9 +77,10 @@ T ObjectFile::bytes_to_value(std::vector<std::uint8_t> bytes) {
 }
 template <typename T>
 T ObjectFile::file_to_value(std::ifstream& objectfile) {
-    std::size_t value_len = sizeof(std::declval<T>());
-    std::uint8_t value[value_len];
-    objectfile >> std::setw(value_len) >> value;
-    return this->bytes_to_value<T>(std::vector<std::uint8_t>(value, value + (value_len - 1)));
+    // NUL終端のことを考慮に入れること！
+    constexpr std::size_t value_len = sizeof(std::declval<T>());
+    std::uint8_t value[value_len + 1];
+    objectfile >> std::setw(value_len + 1) >> value;
+    return this->bytes_to_value<T>(std::vector<std::uint8_t>(value, value + (value_len)));
 }
 }  // namespace nyulan

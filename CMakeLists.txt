@@ -4,15 +4,33 @@ project(nyulan_VM LANGUAGES CXX )
 set(CMAKE_CXX_STANDARD 20)
 add_compile_options(-Wall -Wextra)
 
-find_package(Boost COMPONENTS program_options REQUIRED)
+find_package(Boost COMPONENTS program_options log REQUIRED)
 
 add_library(core STATIC
     vm.cpp
+    )
+target_compile_options(core PRIVATE
+    -pthread
+    )
+target_link_libraries(core PRIVATE
+    pthread
+    ${Boost_LIBRARIES}
     )
 
 add_library(obj STATIC
     objectfile.cpp
     )
+target_compile_options(obj PRIVATE
+    -pthread
+    )
+target_link_libraries(obj PRIVATE
+    pthread
+    ${Boost_LIBRARIES}
+    )
+target_include_directories(obj PUBLIC
+    ${Boost_INCLUDE_DIR}
+    )
+
 add_executable(nyulanVM 
     main.cpp
     )
@@ -20,7 +38,11 @@ target_link_libraries(nyulanVM PRIVATE
     core
     obj
     ${Boost_LIBRARIES}
+    $<$<CXX_COMPILER_ID:GNU>:dl$<SEMICOLON>backtrace>
     )
 target_include_directories(nyulanVM PUBLIC
     ${Boost_INCLUDE_DIR}
+    )
+target_compile_definitions(nyulanVM PUBLIC
+    $<$<CONFIG:Debug>:BOOST_STACKTRACE_USE_ADDR2LINE$<SEMICOLON>BOOST_STACKTRACE_USE_BACKTRACE>
     )

@@ -5,6 +5,7 @@
 #include <map>
 #include <optional>
 #include <stack>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -30,6 +31,9 @@ class VirtualMachine {
     void write(Register fd, Address buf, std::size_t len);
     Register open(Address fname);
     void close(Register fd);
+
+    // for debugging
+    std::string stringify_vm_state();
 };
 }  // namespace nyulan
 #endif
