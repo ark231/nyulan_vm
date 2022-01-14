@@ -174,7 +174,8 @@ void VirtualMachine::exec(std::vector<OneStep> steps) {
                 continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
             default: {
                 std::stringstream err_msg;
-                err_msg << "can't understand opecode" << std::to_string(static_cast<int>(instruction)) << "("
+                err_msg << "@" << static_cast<int>(program_counter) << " can't understand opecode"
+                        << std::to_string(static_cast<int>(instruction)) << "("
                         << magic_enum::enum_name(
                                magic_enum::enum_cast<Instruction>(static_cast<int>(instruction)).value())
                         << ")";
