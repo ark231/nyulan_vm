@@ -1,18 +1,24 @@
 #include "objectfile.hpp"
 
+#include <bitset>
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
+
+#include "logging.hpp"
 namespace nyulan {
+std::vector<std::uint8_t> read_file(std::ifstream&, size_t);
 ObjectFile::ObjectFile(std::string objectfilename) {
     std::ifstream objectfile(objectfilename, std::ios_base::in | std::ios_base::binary);
     if (!objectfile.is_open()) {
         throw new std::runtime_error("error: couldn't open objectfile " + objectfilename);
     }
     objectfile >> std::setw(4) >> this->magic;
+    TRIVIAL_LOG_WITH_FUNCNAME(debug) << this->magic;
     if (std::string(this->magic) != "NYU") {
         throw new std::runtime_error("given file is not nyulan object file");
     }
@@ -26,17 +32,16 @@ ObjectFile::ObjectFile(std::string objectfilename) {
             break;
     }
     this->version = this->file_to_value<decltype(this->version)>(objectfile);
+    TRIVIAL_LOG_WITH_FUNCNAME(debug) << this->version;
     this->literal_data_size = this->file_to_value<decltype(this->literal_data_size)>(objectfile);
 
-    BOOST_LOG_TRIVIAL(debug) << this->literal_data_size;
-    std::uint8_t* literal_datas = new std::uint8_t[this->literal_data_size + 1];
-    objectfile >> std::setw(this->literal_data_size + 1) >> literal_datas;
-    BOOST_LOG_TRIVIAL(debug) << "data_segment:\"" << literal_datas << "\"";
-    this->literal_datas = std::vector<std::uint8_t>(literal_datas, literal_datas + (this->literal_data_size));
-    delete[] literal_datas;
+    TRIVIAL_LOG_WITH_FUNCNAME(debug) << this->literal_data_size;
+    this->literal_datas = read_file(objectfile, this->literal_data_size);
+    TRIVIAL_LOG_WITH_FUNCNAME(debug) << "data_segment:\"" << this->literal_datas.data() << "\"";
+    TRIVIAL_LOG_WITH_FUNCNAME(debug) << this->literal_datas.size();
 
     this->global_label_num = this->file_to_value<decltype(this->global_label_num)>(objectfile);
-    BOOST_LOG_TRIVIAL(debug) << "glabel_n:" << this->global_label_num;
+    TRIVIAL_LOG_WITH_FUNCNAME(debug) << "glabel_n:" << this->global_label_num;
 
     this->global_labels.reserve(this->global_label_num);
     for (auto i = 0; i < this->global_label_num; i++) {
@@ -49,7 +54,7 @@ ObjectFile::ObjectFile(std::string objectfilename) {
     this->code_length = this->file_to_value<decltype(this->code_length)>(objectfile);
     this->code.reserve(this->code_length);
     for (size_t i = 0; i < this->code_length; i++) {
-        auto onestep = this->file_to_value<decltype(this->code)::value_type>(objectfile);  //エンディアン
+        auto onestep = this->file_to_value<decltype(this->code)::value_type::ValueType>(objectfile);  //エンディアン
         this->code.push_back(onestep);
     }
     objectfile.close();
@@ -77,10 +82,14 @@ T ObjectFile::bytes_to_value(std::vector<std::uint8_t> bytes) {
 }
 template <typename T>
 T ObjectFile::file_to_value(std::ifstream& objectfile) {
-    // NUL終端のことを考慮に入れること！
-    constexpr std::size_t value_len = sizeof(std::declval<T>());
-    std::uint8_t value[value_len + 1];
-    objectfile >> std::setw(value_len + 1) >> value;
-    return this->bytes_to_value<T>(std::vector<std::uint8_t>(value, value + (value_len)));
+    return this->bytes_to_value<T>(read_file(objectfile, sizeof(std::declval<T>())));
+}
+std::vector<std::uint8_t> read_file(std::ifstream& file, size_t n) {
+    std::vector<std::uint8_t> result;
+    result.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        result.push_back(file.get());
+    }
+    return result;
 }
 }  // namespace nyulan

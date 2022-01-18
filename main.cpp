@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 
+#include "logging.hpp"
 #include "objectfile.hpp"
 #include "vm.hpp"
 namespace bpo = boost::program_options;
@@ -18,7 +19,8 @@ int main(int argc, char **argv) {
     std::set_terminate(terminate_with_stacktrace);
 #endif
     bpo::options_description opt("option");
-    opt.add_options()("help,h", "show this help")("objectfile,s", bpo::value<std::string>(), "object file");
+    opt.add_options()("help,h", "show this help")("objectfile,s", bpo::value<std::string>(), "object file")(
+        "debug,d", "enable debug outputs");
 
     bpo::variables_map varmap;
     bpo::store(bpo::parse_command_line(argc, argv, opt), varmap);
@@ -31,6 +33,12 @@ int main(int argc, char **argv) {
         std::cerr << "error: no objectfile speciried" << std::endl;
         std::cout << opt << std::endl;
         std::exit(EXIT_FAILURE);
+    }
+    if (varmap.count("debug")) {
+        TRIVIAL_LOG_WITH_FUNCNAME(debug) << "debug output enabled";
+        nyulan::logging::init(boost::log::trivial::debug);
+    } else {
+        nyulan::logging::init(boost::log::trivial::info);
     }
     nyulan::ObjectFile objectfile;
     try {

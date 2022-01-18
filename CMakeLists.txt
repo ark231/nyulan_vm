@@ -4,7 +4,7 @@ project(nyulan_VM LANGUAGES CXX )
 set(CMAKE_CXX_STANDARD 20)
 add_compile_options(-Wall -Wextra)
 
-find_package(Boost COMPONENTS program_options log REQUIRED)
+find_package(Boost COMPONENTS program_options log_setup log REQUIRED)
 
 include(cmake/CPM.cmake)
 CPMAddPackage(
@@ -40,13 +40,22 @@ target_link_libraries(obj PRIVATE
 target_include_directories(obj PUBLIC
     ${Boost_INCLUDE_DIR}
     )
-
+add_library(logging STATIC
+    logging.cpp
+    )
+target_link_libraries(logging PRIVATE
+    ${Boost_LIBRARIES}
+    )
+target_include_directories(logging PUBLIC
+    ${Boost_INCLUDE_DIR}
+    )
 add_executable(nyulanVM 
     main.cpp
     )
 target_link_libraries(nyulanVM PRIVATE
     core
     obj
+    logging
     ${Boost_LIBRARIES}
     $<$<CXX_COMPILER_ID:GNU>:dl$<SEMICOLON>backtrace>
     )
