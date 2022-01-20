@@ -10,6 +10,7 @@ namespace utils {
 template <typename tag, typename value_type, bool is_arithmetic>
 struct PhantomBase_ {};
 
+
 template <typename tag, typename value_type>
 struct PhantomBase_<tag, value_type, true> : private boost::operators<PhantomBase_<tag, value_type, true>>,
                                              private boost::left_shiftable<PhantomBase_<tag, value_type, true>>,
@@ -17,7 +18,7 @@ struct PhantomBase_<tag, value_type, true> : private boost::operators<PhantomBas
     using ValueType = value_type;
     using this_type = PhantomBase_<tag, value_type, true>;
     struct Hash {
-        auto operator()(const this_type a) const { return std::hash<value_type>()(static_cast<const value_type>(a)); }
+        size_t operator()(const this_type a) const { return std::hash<value_type>()(static_cast<const value_type>(a)); }
     };
     value_type value_;
     PhantomBase_(value_type value) : value_(value) {}
@@ -97,5 +98,8 @@ struct PhantomBase_<tag, value_type, false> {
 template <typename tag, typename value_type>
 using Phantom = PhantomBase_<tag, value_type, std::is_arithmetic_v<value_type>>;
 
+enum class Endian { LITTLE, BIG };
+Endian check_native_endian();
+inline Endian native_endian = check_native_endian();
 }  // namespace utils
 }  // namespace nyulan

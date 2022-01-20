@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(nyulan_VM LANGUAGES CXX )
+set(CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 add_compile_options(-Wall -Wextra)
 
@@ -49,6 +50,9 @@ target_link_libraries(logging PRIVATE
 target_include_directories(logging PUBLIC
     ${Boost_INCLUDE_DIR}
     )
+add_library(utils STATIC
+    utils.cpp
+    )
 add_executable(nyulanVM 
     main.cpp
     )
@@ -56,6 +60,7 @@ target_link_libraries(nyulanVM PRIVATE
     core
     obj
     logging
+    utils
     ${Boost_LIBRARIES}
     $<$<CXX_COMPILER_ID:GNU>:dl$<SEMICOLON>backtrace>
     )
