@@ -3,7 +3,9 @@
 #include <bitset>
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
+#include <cmath>
 #include <iomanip>
+#include <magic_enum.hpp>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -34,6 +36,9 @@ ObjectFile::ObjectFile(std::string objectfilename) {
     this->version = this->file_to_value<decltype(this->version)>(objectfile);
     TRIVIAL_LOG_WITH_FUNCNAME(debug) << this->version;
     this->literal_data_size = this->file_to_value<decltype(this->literal_data_size)>(objectfile);
+    if (this->version > CURRENT_OBJECTRILE_VERSION) {
+        throw std::runtime_error("the format is newer than this program");
+    }
 
     TRIVIAL_LOG_WITH_FUNCNAME(debug) << this->literal_data_size;
     this->literal_datas = read_file(objectfile, this->literal_data_size);
@@ -46,9 +51,14 @@ ObjectFile::ObjectFile(std::string objectfilename) {
     this->global_labels.reserve(this->global_label_num);
     for (auto i = 0; i < this->global_label_num; i++) {
         Label label;
-        std::getline(objectfile, label.rael_name, '\0');
+        std::getline(objectfile, label.real_name, '\0');
         label.label_address = this->file_to_value<decltype(label.label_address)>(objectfile);
         this->global_labels.push_back(label);
+    }
+    if (this->version >= 2) {
+        this->instruction_set_version = this->file_to_value<decltype(this->instruction_set_version)>(objectfile);
+    } else {
+        this->instruction_set_version = 1;  // NOTE: obj-v1のときは命令セットはv1しかなかった
     }
 
     this->code_length = this->file_to_value<decltype(this->code_length)>(objectfile);
@@ -58,6 +68,52 @@ ObjectFile::ObjectFile(std::string objectfilename) {
         this->code.push_back(onestep);
     }
     objectfile.close();
+}
+ObjectFile::Label ObjectFile::find_label(std::string name) {
+    for (const auto& label : this->global_labels) {
+        if (label.real_name == name) {
+            return label;
+        }
+    }
+    throw std::runtime_error("label \"" + name + "\" not found");
+}
+std::string ObjectFile::pretty() {
+    std::stringstream result;
+    result << "nyulan objectfile v" << this->version << std::endl;
+    result << "static data size:" << this->literal_data_size << std::endl;
+    result << "static data:\"" << this->literal_datas.data() << "\"" << std::endl;  // TODO: 改行などをエスケープ
+    result << "global labels:{" << std::endl;
+    for (const auto& label : this->global_labels) {
+        result << "    \"" << label.real_name << "\" => " << label.label_address << " ," << std::endl;
+    }
+    result << "}" << std::endl;
+    result << "instruction set version:" << this->instruction_set_version << std::endl;
+    result << "entry point:@" << this->find_label("_start").label_address << std::endl;
+    auto max_code_addr_width = std::floor(std::log10(this->code_length)) + 1;  // XXX:数学的考察が必要
+    for (size_t i = 0; i < this->code_length; i++) {
+        result << std::dec << "@" << i << "  ";
+        // HACK:ループで空白を追加しているが、多分一行でやる方法があるはず
+        for (auto j = 0; j < (max_code_addr_width - (i == 0 ? 1 : std::floor(std::log10(i)) + 1)); j++) {
+            result << " ";
+        }
+        auto step = this->code[i];
+        auto opecode = ((step & 0b1111'1111'0000'0000) >> 8).value();
+        result << magic_enum::enum_name(magic_enum::enum_cast<Instruction>(opecode).value()) << " ";
+        switch (opecode) {
+            case static_cast<std::uint8_t>(Instruction::PUSHL):
+                result << std::hex << static_cast<uint16_t>(step & 0b1111'1111);
+                break;
+            default: {
+                std::vector<std::uint16_t> operands;
+                operands.push_back(static_cast<uint16_t>((step & 0b1111'0000) >> 4));
+                operands.push_back(static_cast<uint16_t>(step & 0b0000'1111));
+                result << "r" << operands[0] << ",r" << operands[1];
+                break;
+            }
+        }
+        result << std::endl;
+    }
+    return result.str();
 }
 template <typename T>
 T ObjectFile::bytes_to_value(std::vector<std::uint8_t> bytes) {

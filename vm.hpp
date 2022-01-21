@@ -16,7 +16,7 @@ class VirtualMachine {
    public:
     VirtualMachine(std::vector<std::uint8_t>);
     VirtualMachine(std::unordered_map<Address, std::uint8_t, Address::Hash>);
-    void exec(std::vector<OneStep>);
+    void exec(std::vector<OneStep>, Address entry_point = 0);
 
    private:
     std::array<Register, 16> registers;

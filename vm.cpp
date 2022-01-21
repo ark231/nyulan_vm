@@ -58,8 +58,8 @@ VirtualMachine::VirtualMachine(std::unordered_map<Address, std::uint8_t, Address
     : static_datas(static_datas) {
     this->registers.fill(0);
 }
-void VirtualMachine::exec(std::vector<OneStep> steps) {
-    Address program_counter = 0;
+void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
+    Address program_counter = entry_point;
     while (program_counter < steps.size()) {
         const auto &step = steps[static_cast<size_t>(program_counter)];
         auto instruction = (step & 0b1111'1111'0000'0000) >> 8;

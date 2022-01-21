@@ -12,8 +12,9 @@ enum class Endian {
     LITTLE,
     BIG,
 };
+constexpr std::uint64_t CURRENT_OBJECTRILE_VERSION = 2;
 struct ObjectFile {
-    char magic[3 + 1];        //{'N','Y','U','\0'}
+    char magic[3 + 1];        //{'N','Y','U','\0'}(NULは読み取り時に追記される)
     std::uint8_t bom[2 + 1];  // 0x1100
     Endian endian;
     std::uint64_t version;
@@ -21,15 +22,19 @@ struct ObjectFile {
     std::vector<std::uint8_t> literal_datas;
     std::uint16_t global_label_num;
     struct Label {
-        std::string rael_name;  // NUL terminated in actual file
+        std::string real_name;  // NUL terminated in actual file
         std::uint64_t label_address;
     };
     std::vector<Label> global_labels;
+    std::uint64_t instruction_set_version;
     std::uint64_t code_length;
     std::vector<OneStep> code;
 
     ObjectFile(std::string);
     ObjectFile() = default;
+
+    Label find_label(std::string name);
+    std::string pretty();
 
    private:
     template <typename T>

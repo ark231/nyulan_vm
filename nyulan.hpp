@@ -14,6 +14,7 @@ struct Address : public utils::Phantom<Address_, std::uint64_t> {
     using super::PhantomBase_;
     Address(Register value) : super::PhantomBase_(static_cast<std::uint64_t>(value)) {}
 };
+constexpr std::uint64_t CURRENT_INSTRUCTION_SET_VERSION = 1;
 enum class Instruction : std::uint8_t {
     NOP = 0,
     MOV,      // dst,src

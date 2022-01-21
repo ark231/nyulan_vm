@@ -17,7 +17,7 @@ CPMAddPackage(
 add_library(core STATIC
     vm.cpp
     )
-target_include_directories(core PUBLIC
+target_include_directories(core PRIVATE
     ${magic_enum_SOURCE_DIR}/include
     )
 target_compile_options(core PRIVATE
@@ -35,11 +35,13 @@ target_compile_options(obj PRIVATE
     -pthread
     )
 target_link_libraries(obj PRIVATE
+    utils
     pthread
     ${Boost_LIBRARIES}
     )
-target_include_directories(obj PUBLIC
+target_include_directories(obj PRIVATE
     ${Boost_INCLUDE_DIR}
+    ${magic_enum_SOURCE_DIR}/include
     )
 add_library(logging STATIC
     logging.cpp
@@ -47,7 +49,7 @@ add_library(logging STATIC
 target_link_libraries(logging PRIVATE
     ${Boost_LIBRARIES}
     )
-target_include_directories(logging PUBLIC
+target_include_directories(logging PRIVATE
     ${Boost_INCLUDE_DIR}
     )
 add_library(utils STATIC
@@ -64,9 +66,21 @@ target_link_libraries(nyulanVM PRIVATE
     ${Boost_LIBRARIES}
     $<$<CXX_COMPILER_ID:GNU>:dl$<SEMICOLON>backtrace>
     )
-target_include_directories(nyulanVM PUBLIC
+target_include_directories(nyulanVM PRIVATE
     ${Boost_INCLUDE_DIR}
     )
-target_compile_definitions(nyulanVM PUBLIC
+target_compile_definitions(nyulanVM PRIVATE
     $<$<CONFIG:Debug>:BOOST_STACKTRACE_USE_ADDR2LINE$<SEMICOLON>BOOST_STACKTRACE_USE_BACKTRACE>
+    )
+
+add_executable(readobj
+    readobj.cpp
+    )
+target_link_libraries(readobj PRIVATE
+    obj
+    logging
+    ${Boost_LIBRARIES}
+    )
+target_include_directories(readobj PRIVATE
+    ${Boost_INCLUDE_DIR}
     )
