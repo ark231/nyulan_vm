@@ -1,3 +1,5 @@
+#ifndef NYULAN_UTILS
+#define NYULAN_UTILS
 #include <boost/operators.hpp>
 #include <functional>
 #include <type_traits>
@@ -9,7 +11,6 @@ namespace nyulan {
 namespace utils {
 template <typename tag, typename value_type, bool is_arithmetic>
 struct PhantomBase_ {};
-
 
 template <typename tag, typename value_type>
 struct PhantomBase_<tag, value_type, true> : private boost::operators<PhantomBase_<tag, value_type, true>>,
@@ -103,3 +104,4 @@ Endian check_native_endian();
 inline Endian native_endian = check_native_endian();
 }  // namespace utils
 }  // namespace nyulan
+#endif

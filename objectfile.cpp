@@ -14,6 +14,22 @@
 #include "logging.hpp"
 namespace nyulan {
 std::vector<std::uint8_t> read_file(std::ifstream&, size_t);
+
+template <typename T>
+T ObjectFile::file_to_value(std::ifstream& objectfile) {
+    return this->bytes_to_value<T>(read_file(objectfile, sizeof(std::declval<T>())));
+}
+template <>  // NULL終端文字列を取り出す特殊化
+std::string ObjectFile::file_to_value(std::ifstream& objectfile) {
+    std::string result;
+    std::uint8_t char_read;
+    do {
+        char_read = objectfile.get();
+        result.push_back(char_read);
+    } while (char_read != '\0');
+    return result;
+}
+
 ObjectFile::ObjectFile(std::string objectfilename) {
     std::ifstream objectfile(objectfilename, std::ios_base::in | std::ios_base::binary);
     if (!objectfile.is_open()) {
@@ -67,6 +83,18 @@ ObjectFile::ObjectFile(std::string objectfilename) {
         auto onestep = this->file_to_value<decltype(this->code)::value_type::ValueType>(objectfile);  //エンディアン
         this->code.push_back(onestep);
     }
+    if (this->version >= 3) {
+        this->num_optional_sections = this->file_to_value<decltype(this->num_optional_sections)>(objectfile);
+    } else {
+        this->num_optional_sections = 0;  // NOTE: obj-v2まではoptional sectionはなかった
+    }
+    for (size_t i = 0; i < this->num_optional_sections; i++) {
+        auto section = std::unique_ptr<OptionalSection>();
+        section->name = this->file_to_value<std::string>(objectfile);
+        section->datasize = this->file_to_value<decltype(OptionalSection::datasize)>(objectfile);
+        section->data = read_file(objectfile, section->datasize);
+        this->optional_sections.push_back(std::move(section));
+    }
     objectfile.close();
 }
 ObjectFile::Label ObjectFile::find_label(std::string name) {
@@ -89,7 +117,7 @@ std::string ObjectFile::pretty() {
     result << "}" << std::endl;
     result << "instruction set version:" << this->instruction_set_version << std::endl;
     result << "entry point:@" << this->find_label("_start").label_address << std::endl;
-    auto max_code_addr_width = std::floor(std::log10(this->code_length)) + 1;  // XXX:数学的考察が必要
+    auto max_code_addr_width = std::floor(std::log10(this->code_length)) + 1;  // NOTE: 数学的考察が必要
     for (size_t i = 0; i < this->code_length; i++) {
         result << std::dec << "@" << i << "  ";
         // HACK:ループで空白を追加しているが、多分一行でやる方法があるはず
@@ -135,10 +163,6 @@ T ObjectFile::bytes_to_value(std::vector<std::uint8_t> bytes) {
         std::reverse(bytes.begin(), bytes.end());  //入力をひっくり返す
     }
     return *reinterpret_cast<T*>(bytes.data());
-}
-template <typename T>
-T ObjectFile::file_to_value(std::ifstream& objectfile) {
-    return this->bytes_to_value<T>(read_file(objectfile, sizeof(std::declval<T>())));
 }
 std::vector<std::uint8_t> read_file(std::ifstream& file, size_t n) {
     std::vector<std::uint8_t> result;
