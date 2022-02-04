@@ -16,8 +16,6 @@ enum class Endian {
     BIG,
 };
 
-struct OptionalSection;
-
 constexpr std::uint64_t CURRENT_OBJECTRILE_VERSION = 3;
 struct ObjectFile {
     char magic[3 + 1];        //{'N','Y','U','\0'}(NULは読み取り時に追記される)
@@ -36,29 +34,29 @@ struct ObjectFile {
     std::uint64_t code_length;
     std::vector<OneStep> code;
     std::uint64_t num_optional_sections;
-    std::vector<std::unique_ptr<OptionalSection>> optional_sections;
+    struct OptionalSection {
+        const ObjectFile *parent = nullptr;  // NOTE: 読み取った側の処理に必要な参照であって、実際のファイル上には無い
+
+        std::string name;
+        std::uint64_t datasize;
+        std::vector<std::uint8_t> data;
+    };
+    std::vector<std::shared_ptr<OptionalSection>> optional_sections;
 
     ObjectFile(std::string objectfilename);
     ObjectFile() = default;
 
     Label find_label(std::string name);
+    std::shared_ptr<OptionalSection> find_section(std::string name);
     std::string pretty();
 
+    template <typename T>
+    T bytes_to_value(
+        std::vector<std::uint8_t> bytes) const;  //中で変更するかもなので、参照ではなくコピーを受ける！必ず！
    private:
     template <typename T>
-    T file_to_value(std::ifstream&);  //ファイルを読んだことによる変更を外に波及させたいので、参照
-    template <typename T>
-    T bytes_to_value(std::vector<std::uint8_t> bytes);  //中で変更するかもなので、参照ではなくコピーを受ける！必ず！
-};
-struct OptionalSection {
-    std::string name;
-    std::uint16_t datasize;
-    std::vector<std::uint8_t> data;
-};
-
-struct DebugSection : public OptionalSection {
-    using OptionalSection::OptionalSection;
-    Address addr2line(Address step_address);
+    T file_to_value(std::ifstream &);  //ファイルを読んだことによる変更を外に波及させたいので、参照
 };
 }  // namespace nyulan
+#include "objectfile_templates.cpp"  //公開するテンプレートの実装
 #endif

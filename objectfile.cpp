@@ -27,6 +27,7 @@ std::string ObjectFile::file_to_value(std::ifstream& objectfile) {
         char_read = objectfile.get();
         result.push_back(char_read);
     } while (char_read != '\0');
+    result.pop_back();  // NOTE: 末尾に\0が含まれてしまっているので、削除
     return result;
 }
 
@@ -89,14 +90,17 @@ ObjectFile::ObjectFile(std::string objectfilename) {
         this->num_optional_sections = 0;  // NOTE: obj-v2まではoptional sectionはなかった
     }
     for (size_t i = 0; i < this->num_optional_sections; i++) {
-        auto section = std::unique_ptr<OptionalSection>();
+        auto section = std::shared_ptr<OptionalSection>(new OptionalSection);
+        section->parent = this;
         section->name = this->file_to_value<std::string>(objectfile);
+        TRIVIAL_LOG_WITH_FUNCNAME(debug) << "new section with name \"" << section->name << "\"";
         section->datasize = this->file_to_value<decltype(OptionalSection::datasize)>(objectfile);
+        TRIVIAL_LOG_WITH_FUNCNAME(debug) << "new section with datasize" << section->datasize;
         section->data = read_file(objectfile, section->datasize);
-        this->optional_sections.push_back(std::move(section));
+        this->optional_sections.push_back(section);
     }
     objectfile.close();
-}
+}  // namespace nyulan
 ObjectFile::Label ObjectFile::find_label(std::string name) {
     for (const auto& label : this->global_labels) {
         if (label.real_name == name) {
@@ -105,6 +109,16 @@ ObjectFile::Label ObjectFile::find_label(std::string name) {
     }
     throw std::runtime_error("label \"" + name + "\" not found");
 }
+std::shared_ptr<ObjectFile::OptionalSection> ObjectFile::find_section(std::string name) {
+    TRIVIAL_LOG_WITH_FUNCNAME(debug) << "search for section with name\"" << name << "\"";
+    for (const auto& section : this->optional_sections) {
+        TRIVIAL_LOG_WITH_FUNCNAME(debug) << "current name:\"" << section->name << "\"";
+        if (section->name == name) {
+            return section;
+        }
+    }
+    throw std::runtime_error("section \"" + name + "\" not found");
+}
 std::string ObjectFile::pretty() {
     std::stringstream result;
     result << "nyulan objectfile v" << this->version << std::endl;
@@ -112,7 +126,7 @@ std::string ObjectFile::pretty() {
     result << "static data:\"" << this->literal_datas.data() << "\"" << std::endl;  // TODO: 改行などをエスケープ
     result << "global labels:{" << std::endl;
     for (const auto& label : this->global_labels) {
-        result << "    \"" << label.real_name << "\" => " << label.label_address << " ," << std::endl;
+        result << "    \"" << label.real_name << "\" => @" << label.label_address << " ," << std::endl;
     }
     result << "}" << std::endl;
     result << "instruction set version:" << this->instruction_set_version << std::endl;
@@ -128,8 +142,21 @@ std::string ObjectFile::pretty() {
         auto opecode = ((step & 0b1111'1111'0000'0000) >> 8).value();
         result << magic_enum::enum_name(magic_enum::enum_cast<Instruction>(opecode).value()) << " ";
         switch (opecode) {
+            case static_cast<std::uint8_t>(Instruction::RET):
+                break;
             case static_cast<std::uint8_t>(Instruction::PUSHL):
                 result << std::hex << static_cast<uint16_t>(step & 0b1111'1111);
+                break;
+            case static_cast<std::uint8_t>(Instruction::PUSHR8):
+            case static_cast<std::uint8_t>(Instruction::PUSHR16):
+            case static_cast<std::uint8_t>(Instruction::PUSHR32):
+            case static_cast<std::uint8_t>(Instruction::PUSHR64):
+            case static_cast<std::uint8_t>(Instruction::POP8):
+            case static_cast<std::uint8_t>(Instruction::POP16):
+            case static_cast<std::uint8_t>(Instruction::POP32):
+            case static_cast<std::uint8_t>(Instruction::POP64):
+            case static_cast<std::uint8_t>(Instruction::CALL):
+                result << "r" << std::dec << static_cast<uint16_t>((step & 0b1111'0000) >> 4);
                 break;
             default: {
                 std::vector<std::uint16_t> operands;
@@ -141,28 +168,11 @@ std::string ObjectFile::pretty() {
         }
         result << std::endl;
     }
+    for (const auto& section : this->optional_sections) {
+        result << "section \"" << section->name << "\""
+               << " datasize:" << section->datasize << std::endl;
+    }
     return result.str();
-}
-template <typename T>
-T ObjectFile::bytes_to_value(std::vector<std::uint8_t> bytes) {
-    if (bytes.size() < sizeof(T)) {
-        throw new std::invalid_argument("provided " + std::to_string(bytes.size()) +
-                                        " bytes of bytearray is not long enough to construct" + typeid(T).name());
-    }
-    std::uint16_t bom = 0x1100;
-    Endian native_endian;
-    switch (reinterpret_cast<char*>(&bom)[0]) {
-        case 0x00:
-            native_endian = Endian::LITTLE;
-            break;
-        case 0x11:
-            native_endian = Endian::BIG;
-            break;
-    }
-    if (native_endian != this->endian) {
-        std::reverse(bytes.begin(), bytes.end());  //入力をひっくり返す
-    }
-    return *reinterpret_cast<T*>(bytes.data());
 }
 std::vector<std::uint8_t> read_file(std::ifstream& file, size_t n) {
     std::vector<std::uint8_t> result;

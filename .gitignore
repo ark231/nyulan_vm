@@ -1,5 +1,6 @@
 *.swp
 .clang-format
+.clang-tidy
 compile_commands.json
 Doxyfile
 /document/

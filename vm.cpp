@@ -46,7 +46,8 @@ T pop_as(std::stack<std::uint8_t> &stack) {
     return value;
 }
 }  // namespace
-VirtualMachine::VirtualMachine(std::vector<std::uint8_t> static_datas) {
+VirtualMachine::VirtualMachine(std::vector<std::uint8_t> static_datas, bool enable_debug)
+    : debug_enabled(enable_debug) {
     Address head_addr = 0;
     for (const auto &byte : static_datas) {
         this->static_datas[head_addr] = byte;
@@ -54,23 +55,27 @@ VirtualMachine::VirtualMachine(std::vector<std::uint8_t> static_datas) {
     }
     this->registers.fill(0);
 }
-VirtualMachine::VirtualMachine(std::unordered_map<Address, std::uint8_t, Address::Hash> static_datas)
-    : static_datas(static_datas) {
+VirtualMachine::VirtualMachine(std::unordered_map<Address, std::uint8_t, Address::Hash> static_datas, bool enable_debug)
+    : static_datas(static_datas), debug_enabled(enable_debug) {
     this->registers.fill(0);
 }
+void VirtualMachine::install_callbacks(CallBacks callbacks) { this->callbacks = callbacks; }
+using namespace magic_enum::ostream_operators;  // enumをこの名前空間内でストリームに流すため
 void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
-    Address program_counter = entry_point;
+    program_counter = entry_point;
     while (program_counter < steps.size()) {
-        const auto &step = steps[static_cast<size_t>(program_counter)];
+        const auto &step = steps.at(static_cast<size_t>(program_counter));
         auto instruction = (step & 0b1111'1111'0000'0000) >> 8;
         int operand[] = {static_cast<int>((step & 0b1111'0000) >> 4), static_cast<int>((step & 0b1111))};
+        std::optional<Address> next_program_counter = std::nullopt;
         BOOST_LOG_TRIVIAL(debug) << stringify_vm_state();
         std::stringstream debug_msg;
         debug_msg << "@" << static_cast<int>(program_counter) << " opecode"
                   << std::to_string(static_cast<int>(instruction)) << "("
-                  << magic_enum::enum_name(magic_enum::enum_cast<Instruction>(static_cast<int>(instruction)).value())
-                  << ") " << operand[0] << "," << operand[1];
+                  << magic_enum::enum_cast<Instruction>(static_cast<int>(instruction)).value() << ") " << operand[0]
+                  << "," << operand[1];
         BOOST_LOG_TRIVIAL(debug) << debug_msg.str();
+        this->callbacks.on_loop_head(this->program_counter, step);
         switch (instruction.value()) {
             case static_cast<uint8_t>(Instruction::MOV):
                 this->registers[operand[0]] = this->registers[operand[1]];
@@ -267,22 +272,22 @@ void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
                 break;
             case static_cast<uint8_t>(Instruction::IFZ):
                 if (this->registers[operand[0]] == 0) {
-                    program_counter = static_cast<size_t>(this->registers[operand[1]]);
+                    next_program_counter = static_cast<size_t>(this->registers[operand[1]]);
                 }
-                continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
+                break;
             case static_cast<uint8_t>(Instruction::IFP):
                 if (this->registers[operand[0]] > 0) {
-                    program_counter = static_cast<size_t>(this->registers[operand[1]]);
+                    next_program_counter = static_cast<size_t>(this->registers[operand[1]]);
                 }
-                continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
+                break;
             case static_cast<uint8_t>(Instruction::IFN):
                 if (this->registers[operand[0]] < 0) {
-                    program_counter = static_cast<size_t>(this->registers[operand[1]]);
+                    next_program_counter = static_cast<size_t>(this->registers[operand[1]]);
                 }
-                continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
+                break;
             case static_cast<uint8_t>(Instruction::GOTO):
-                program_counter = this->registers[operand[0]];
-                continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
+                next_program_counter = this->registers[operand[0]];
+                break;
             case static_cast<uint8_t>(Instruction::CALL):
                 if (registers[operand[0]] & ((Register)0b1 << 63)) {
                     // built_in
@@ -295,16 +300,16 @@ void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
                             calculation_stack.push(byte);
                         }
                     }
-                    break;
+                    break;  //プログラムカウンタは普通に進む
                 } else {
                     this->call_stack.push(program_counter);
-                    program_counter = this->registers[operand[0]];
-                    continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
+                    next_program_counter = this->registers[operand[0]];
                 }
+                break;
             case static_cast<uint8_t>(Instruction::RET):
-                program_counter = this->call_stack.top();
+                next_program_counter = this->call_stack.top().value() + 1;  //呼出の次の命令から再開
                 this->call_stack.pop();
-                continue;  //プログラムカウンタが上書きされたので、インクリメントは飛ばさなければならない
+                break;
             default: {
                 std::stringstream err_msg;
                 err_msg << "@" << static_cast<int>(program_counter) << " can't understand opecode"
@@ -313,22 +318,28 @@ void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
                                magic_enum::enum_cast<Instruction>(static_cast<int>(instruction)).value())
                         << ")";
                 throw std::runtime_error(err_msg.str());
-            } break;
+            }
         }
-        program_counter++;
+        if (next_program_counter.has_value()) {  //変更された
+            this->program_counter = next_program_counter.value();
+        } else {  //変更されなかった
+            this->program_counter++;
+        }
+        this->callbacks.on_program_counter_updated(this->program_counter);
     }
 }
 std::optional<Register> VirtualMachine::invoke_builtin(Address func_addr) {
     TRIVIAL_LOG_WITH_FUNCNAME(debug) << "called" << func_addr.value();
     // std::vector<std::variant<Register::ValueType, Address::ValueType, size_t>> args;
     std::vector<std::variant<size_t>> args;  // currently, all types above is the same
+    std::optional<Register> result = std::nullopt;
     switch (func_addr.value()) {
         case static_cast<uint8_t>(BuiltinFuncs::READ):
             args.push_back(pop_as<Register::ValueType>(this->calculation_stack));
             args.push_back(pop_as<Address::ValueType>(this->calculation_stack));
             args.push_back(pop_as<size_t>(this->calculation_stack));
-            this->read(std::get<Register::ValueType>(args[0]), std::get<Address::ValueType>(args[1]),
-                       std::get<size_t>(args[2]));
+            result = this->read(std::get<Register::ValueType>(args[0]), std::get<Address::ValueType>(args[1]),
+                                std::get<size_t>(args[2]));
             break;
         case static_cast<uint8_t>(BuiltinFuncs::WRITE):
             args.push_back(pop_as<Register::ValueType>(this->calculation_stack));
@@ -341,22 +352,40 @@ std::optional<Register> VirtualMachine::invoke_builtin(Address func_addr) {
             args.push_back(pop_as<Register::ValueType>(this->calculation_stack));
             this->exit(std::get<Register::ValueType>(args[0]));
             break;
+        default: {
+            std::stringstream err_msg;
+            err_msg << "can't invoke built in function" << func_addr.value();
+            throw std::runtime_error(err_msg.str());
+        }
     }
-    return std::nullopt;
+    return result;
 }
-void VirtualMachine::read(Register fd, Address buf, std::size_t len) {
+Register VirtualMachine::read(Register fd, Address buf, std::size_t len) {
     TRIVIAL_LOG_WITH_FUNCNAME(debug) << "built-in read invoked";
+    Register result;
+    // TODO: fd0とそれ以外の処理が、cinかfstream*かしか違わず、ほぼ同じコード。きれいにまとめられるはず
     if (fd.value() == 0) {
         for (size_t i = 0; i < len; i++) {
-            access_memory(Address(buf + i)) = std::cin.get();
+            auto new_char = std::cin.get();
+            access_memory(Address(buf + i)) = new_char;
+            result = i + 1;  // NOTE: iは序数なので0始まり、結果は基数なので1始まり
+            if (new_char == '\n') {
+                break;  // NOTE: resultは、途中でここに入ったらそのときの値のままで、最後まで行ったらちゃんとlen+1になる
+            }
         }
     } else if (fd.value() < 3) {
         throw std::runtime_error("error: neither stdout nor stderr is readable");
     } else {
         for (size_t i = 0; i < len; i++) {
-            access_memory(Address(buf + i)) = this->fd_to_file.at(fd)->get();
+            auto new_char = this->fd_to_file.at(fd)->get();
+            access_memory(Address(buf + i)) = new_char;
+            result = i + 1;  // NOTE: iは序数なので0始まり、結果は基数なので1始まり
+            if (new_char == '\n') {
+                break;
+            }
         }
     }
+    return result;
 }
 void VirtualMachine::write(Register fd, Address buf, std::size_t len) {
     TRIVIAL_LOG_WITH_FUNCNAME(debug) << "built-in write invoked";
@@ -409,10 +438,19 @@ std::uint8_t &VirtualMachine::access_memory(Address addr) {
 std::string VirtualMachine::stringify_vm_state() {
     std::stringstream result;
     for (size_t i = 0; const auto &register_ : registers) {
-        result << "r" << i << ":" << std::hex << static_cast<Register::ValueType>(register_) << " ";
+        result << std::dec << "r" << i << ":" << std::hex << static_cast<Register::ValueType>(register_) << " ";
         i++;
     }
     result << std::endl;
     return result.str();
 }
+
+// REVIEW: 読み込んでいるだけなので、マルチスレッドはないままで大丈夫？
+Address VirtualMachine::get_program_counter() { return this->program_counter; }
+
+// TODO: マルチスレッドに対応した実装
+/*
+void VirtualMachine::set_program_counter(Address new_value) {
+}
+*/
 }  // namespace nyulan

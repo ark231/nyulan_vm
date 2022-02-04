@@ -4,11 +4,12 @@
 
 #include "logging.hpp"
 #include "objectfile.hpp"
+#include "utils.hpp"
 namespace bpo = boost::program_options;
 int main(int argc, char **argv) {
     bpo::options_description opt("option");
     opt.add_options()("help,h", "show this help")("objectfile,s", bpo::value<std::string>(), "object file")(
-        "debug,d", "enable debug outputs");
+        "hexdump-sections,S", "dump sections' contents")("debug,d", "enable debug outputs");
 
     bpo::variables_map varmap;
     bpo::store(bpo::parse_command_line(argc, argv, opt), varmap);
@@ -35,6 +36,14 @@ int main(int argc, char **argv) {
         std::cerr << except->what() << std::endl;
         exit(EXIT_FAILURE);
     }
-    std::cout << objectfile.pretty() << std::endl;
+    if (not varmap.count("hexdump-sections")) {
+        std::cout << objectfile.pretty() << std::endl;
+    } else {
+        for (const auto &section : objectfile.optional_sections) {
+            std::cout << "section \"" << section->name << "\" with datasize " << std::dec << section->datasize << ":"
+                      << std::endl;
+            nyulan::utils::hexdump(section->data);
+        }
+    }
     return 0;
 }

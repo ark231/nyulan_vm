@@ -46,7 +46,7 @@ target_include_directories(obj PRIVATE
 add_library(logging STATIC
     logging.cpp
     )
-target_link_libraries(logging PRIVATE
+target_link_libraries(logging PUBLIC
     ${Boost_LIBRARIES}
     )
 target_include_directories(logging PRIVATE
@@ -54,6 +54,9 @@ target_include_directories(logging PRIVATE
     )
 add_library(utils STATIC
     utils.cpp
+    )
+target_link_libraries(utils PRIVATE
+    logging
     )
 add_executable(nyulanVM 
     main.cpp
@@ -79,8 +82,28 @@ add_executable(readobj
 target_link_libraries(readobj PRIVATE
     obj
     logging
+    utils
     ${Boost_LIBRARIES}
     )
 target_include_directories(readobj PRIVATE
     ${Boost_INCLUDE_DIR}
+    )
+
+add_executable(ndb 
+    ndb.cpp
+    )
+target_link_libraries(ndb PRIVATE
+    core
+    obj
+    logging
+    utils
+    ${Boost_LIBRARIES}
+    $<$<CXX_COMPILER_ID:GNU>:dl$<SEMICOLON>backtrace>
+    )
+target_include_directories(ndb PRIVATE
+    ${Boost_INCLUDE_DIR}
+    ${magic_enum_SOURCE_DIR}/include
+    )
+target_compile_definitions(ndb PRIVATE
+    $<$<CONFIG:Debug>:BOOST_STACKTRACE_USE_ADDR2LINE$<SEMICOLON>BOOST_STACKTRACE_USE_BACKTRACE>
     )

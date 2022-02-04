@@ -102,6 +102,11 @@ using Phantom = PhantomBase_<tag, value_type, std::is_arithmetic_v<value_type>>;
 enum class Endian { LITTLE, BIG };
 Endian check_native_endian();
 inline Endian native_endian = check_native_endian();
+
+std::uint8_t ascii_printable(std::uint8_t);
+// dump to stdout
+void hexdump(std::vector<std::uint8_t>&, std::string options = "-C");
+
 }  // namespace utils
 }  // namespace nyulan
 #endif
