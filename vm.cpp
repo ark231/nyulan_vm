@@ -19,10 +19,21 @@
 namespace nyulan {
 namespace {
 Register treat_as_double(Register reg0, Register reg1, std::function<double(double, double)> operation) {
-    double conved_reg0 = *reinterpret_cast<double *>(&reg0);
-    double conved_reg1 = *reinterpret_cast<double *>(&reg1);
+    static_assert(sizeof(Register::ValueType) == sizeof(double),
+                  "cannot treat Register as double because their size are different");
+    double conved_reg0;
+    auto reg0_value = reg0.value();
+    std::memcpy(reinterpret_cast<char *>(&conved_reg0), reinterpret_cast<const char *>(&reg0_value), sizeof(double));
+
+    double conved_reg1;
+    auto reg1_value = reg1.value();
+    std::memcpy(reinterpret_cast<char *>(&conved_reg1), reinterpret_cast<const char *>(&reg1_value), sizeof(double));
+
     double ope_result = operation(conved_reg0, conved_reg1);
-    return *reinterpret_cast<Register *>(&ope_result);
+
+    Register::ValueType result;
+    std::memcpy(reinterpret_cast<char *>(&result), reinterpret_cast<const char *>(&ope_result), sizeof(result));
+    return result;
 }
 template <typename T>
 T pop_as(std::stack<std::uint8_t> &stack) {
@@ -171,10 +182,16 @@ void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
                 this->calculation_stack.push(static_cast<std::uint8_t>(step & 0b1111'1111));
                 break;
             case static_cast<uint8_t>(Instruction::POP8):
+                if (this->calculation_stack.empty()) {
+                    throw std::runtime_error("error: tried to pop from empty stack");
+                }
                 this->registers[operand[0]] ^= (this->registers[operand[0]] & 0b1111'1111);
                 this->registers[operand[0]] |= this->calculation_stack.top();
                 break;
             case static_cast<uint8_t>(Instruction::POP16): {
+                if (this->calculation_stack.empty()) {
+                    throw std::runtime_error("error: tried to pop from empty stack");
+                }
                 this->registers[operand[0]] ^= (this->registers[operand[0]] & (~static_cast<std::uint16_t>(0)));
                 uint16_t value = 0;
                 for (size_t i = 0; i < sizeof(uint16_t); i++) {
@@ -186,6 +203,9 @@ void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
                 break;
             }
             case static_cast<uint8_t>(Instruction::POP32): {
+                if (this->calculation_stack.empty()) {
+                    throw std::runtime_error("error: tried to pop from empty stack");
+                }
                 this->registers[operand[0]] ^= (this->registers[operand[0]] & (~static_cast<std::uint32_t>(0)));
                 uint32_t value = 0;
                 for (size_t i = 0; i < sizeof(uint32_t); i++) {
@@ -197,6 +217,9 @@ void VirtualMachine::exec(std::vector<OneStep> steps, Address entry_point) {
                 break;
             }
             case static_cast<uint8_t>(Instruction::POP64): {
+                if (this->calculation_stack.empty()) {
+                    throw std::runtime_error("error: tried to pop from empty stack");
+                }
                 this->registers[operand[0]] ^= (this->registers[operand[0]] & (~static_cast<std::uint64_t>(0)));
                 uint64_t value = 0;
                 for (size_t i = 0; i < sizeof(uint64_t); i++) {
